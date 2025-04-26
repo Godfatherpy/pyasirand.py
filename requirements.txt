@@ -1,6 +1,4 @@
 python-telegram-bot==20.7
 pymongo==4.7.2
 python-dotenv==1.0.1
-
-# Optional: For improved async MongoDB performance (if you use Motor instead of PyMongo)
-# motor==3.4.0
+requests
