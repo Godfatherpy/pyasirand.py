@@ -23,8 +23,8 @@ from db import init_db
 
 # --- Logging Setup ---
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
@@ -37,23 +37,26 @@ async def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
     # Store db_client in bot_data for access in handlers
-    application.bot_data['db_client'] = db_client
+    application.bot_data["db_client"] = db_client
 
     # --- Register User Command Handlers ---
-    application.add_handler(CommandHandler('start', start_command))
-    application.add_handler(CommandHandler('getvideo', get_video_command))
-    application.add_handler(CallbackQueryHandler(navigation_callback, pattern='^(next|prev)_'))
-    application.add_handler(CallbackQueryHandler(category_callback, pattern='^category_'))
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("getvideo", get_video_command))
+    application.add_handler(
+        CallbackQueryHandler(navigation_callback, pattern="^(next|prev)_")
+    )
+    application.add_handler(CallbackQueryHandler(category_callback, pattern="^category_"))
 
     # --- Register Admin Command Handlers ---
-    application.add_handler(CommandHandler('addcategory', add_category_command))
-    application.add_handler(CommandHandler('removecategory', remove_category_command))
-    application.add_handler(CallbackQueryHandler(admin_callback, pattern='^admin_'))
+    application.add_handler(CommandHandler("addcategory", add_category_command))
+    application.add_handler(CommandHandler("removecategory", remove_category_command))
+    application.add_handler(CallbackQueryHandler(admin_callback, pattern="^admin_"))
 
     # --- Start the bot ---
     logger.info("Bot started and polling for updates.")
     await application.run_polling()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())
     
