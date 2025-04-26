@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 # Load environment variables from a .env file (if present)
 load_dotenv()
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_BOT_TOKEN = os.getenv("7646433933:AAFNt3yLxXuwOPhJEfGyFtvNgkljQgJx-Wk")
 MONGODB_URI = os.getenv("MONGODB_URI")
 
 # Optional: Admin user IDs (comma-separated in .env)
