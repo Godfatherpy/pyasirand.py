@@ -18,3 +18,6 @@ VIDEO_LIMIT_PER_DAY = int(os.getenv("VIDEO_LIMIT_PER_DAY", "20"))
 if not TELEGRAM_BOT_TOKEN or not MONGODB_URI:
     raise ValueError("TELEGRAM_BOT_TOKEN and MONGODB_URI must be set in environment variables or .env file")
   
+# config.py
+
+URL_SHORTENER_API = "https://your-shortener-service.com/api?url={}"
