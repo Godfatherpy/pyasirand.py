@@ -29,22 +29,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def store_db_client(application):
-    """Proper async initialization with database client"""
+async def init_db_client(application):
+    """Proper async initialization"""
     application.bot_data["db_client"] = init_db(MONGODB_URI)
-    logger.info("Database client initialized")
+    logger.info("Database initialized")
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Global error handler"""
-    logger.error(f"Update {update} caused error: {context.error}", exc_info=True)
+    logger.error(f"Error: {context.error}", exc_info=True)
 
 async def main():
     """Main async entry point"""
+    application = None
     try:
         application = (
             ApplicationBuilder()
             .token(TELEGRAM_BOT_TOKEN)
-            .post_init(store_db_client)
+            .post_init(init_db_client)
             .build()
         )
 
@@ -55,39 +56,4 @@ async def main():
             CallbackQueryHandler(navigation_callback, pattern=r"^(next|prev)_"),
             CallbackQueryHandler(category_callback, pattern=r"^category_"),
             CommandHandler("addcategory", add_category_command),
-            CommandHandler("removecategory", remove_category_command),
-            CallbackQueryHandler(admin_callback, pattern=r"^admin_"),
-        ]
-        
-        for handler in handlers:
-            application.add_handler(handler)
-
-        application.add_error_handler(error_handler)
-
-        # --- Start Polling ---
-        logger.info("Starting bot with proper event loop handling")
-        await application.run_polling(
-            drop_pending_updates=True,
-            close_loop=False,
-            stop_signals=None,
-            allowed_updates=[
-                "message",
-                "callback_query",
-                "chat_member",
-                "my_chat_member"
-            ]
-        )
-
-    except Exception as e:
-        logger.critical(f"Fatal error: {e}", exc_info=True)
-        raise
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
-    except Exception as e:
-        logger.critical(f"Unhandled exception: {e}", exc_info=True)
-    finally:
-        logger.info("Process terminated")
+            CommandHandler("removecategory",
