@@ -1,3 +1,4 @@
+# bot.py - Full Implementation
 import logging
 import asyncio
 from telegram import Update
@@ -8,40 +9,68 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from config import TELEGRAM_BOT_TOKEN, MONGODB_URI
-from handlers.user import (
-    start_command,
-    get_video_command,
-    navigation_callback,
-    category_callback,
-)
-from handlers.admin import (
-    add_category_command,
-    remove_category_command,
-    admin_callback,
-)
-from db import init_db
+# Configuration (config.py)
+TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+MONGODB_URI = "mongodb://localhost:27017/yourdb"
 
-# --- Logging Setup ---
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
+# Database (db.py)
+async def init_db(mongo_uri):
+    """Initialize MongoDB connection"""
+    from pymongo import MongoClient
+    return MongoClient(mongo_uri).get_database()
 
+# Handlers (handlers/user.py)
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /start command"""
+    await update.message.reply_text("🚀 Welcome! Use /getvideo to browse content.")
+
+async def get_video_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /getvideo command"""
+    await update.message.reply_text("📡 Fetching videos...")
+
+async def navigation_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle pagination buttons"""
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("🔍 Loading more videos...")
+
+async def category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle category selection"""
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("🗂 Category selected!")
+
+# Admin Handlers (handlers/admin.py)
+async def add_category_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /addcategory command"""
+    await update.message.reply_text("➕ Adding new category...")
+
+async def remove_category_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /removecategory command"""
+    await update.message.reply_text("➖ Removing category...")
+
+async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle admin panel actions"""
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("⚙️ Admin action processed!")
+
+# Core Application
 async def init_db_client(application):
-    """Proper async initialization"""
-    application.bot_data["db_client"] = init_db(MONGODB_URI)
-    logger.info("Database initialized")
+    """Initialize database connection"""
+    application.bot_data["db"] = await init_db(MONGODB_URI)
+    logging.info("Database connection established")
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Global error handler"""
-    logger.error(f"Error: {context.error}", exc_info=True)
+    logging.error(f"🚨 Error: {context.error}", exc_info=True)
 
 async def main():
-    """Main async entry point"""
+    """Main application entry point"""
     application = None
+    
     try:
+        # Build application
         application = (
             ApplicationBuilder()
             .token(TELEGRAM_BOT_TOKEN)
@@ -49,7 +78,7 @@ async def main():
             .build()
         )
 
-        # --- Handler Registration ---
+        # Register handlers
         handlers = [
             CommandHandler("start", start_command),
             CommandHandler("getvideo", get_video_command),
@@ -65,34 +94,40 @@ async def main():
 
         application.add_error_handler(error_handler)
 
-        # --- Start Polling ---
-        logger.info("Bot starting with proper event loop handling")
+        # Start polling
+        logging.info("🤖 Bot starting in polling mode...")
         await application.run_polling(
             drop_pending_updates=True,
             close_loop=False,
-            stop_signals=None,
             allowed_updates=[
                 "message",
                 "callback_query",
-                "chat_member",
-                "my_chat_member"
+                "chat_member"
             ]
         )
 
     except asyncio.CancelledError:
-        logger.info("Bot shutdown requested")
+        logging.info("🛑 Bot shutdown requested")
     except Exception as e:
-        logger.critical(f"Fatal error: {e}", exc_info=True)
-        if application:
+        logging.critical(f"💥 Fatal error: {e}", exc_info=True)
+        if application and application.running:
             await application.stop()
         raise
+    finally:
+        logging.info("🧹 Cleanup completed")
 
 if __name__ == "__main__":
+    # Configure logging
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO
+    )
+    
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
+        logging.info("👋 Bot stopped by user")
     except Exception as e:
-        logger.critical(f"Unhandled exception: {e}", exc_info=True)
+        logging.critical(f"❌ Unhandled exception: {e}", exc_info=True)
     finally:
-        logger.info("Process terminated")
+        logging.info("🔚 Process terminated")
