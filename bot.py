@@ -1,6 +1,5 @@
 import logging
 import asyncio
-from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -9,43 +8,72 @@ from telegram.ext import (
 )
 from config import TELEGRAM_BOT_TOKEN, MONGODB_URI
 
-# Health Check Server
+# Import your handlers
+from handlers.user import (
+    start_command,
+    get_video_command,
+    navigation_callback,
+    category_callback,
+    show_categories_callback,
+)
+from handlers.admin import (
+    add_category_command,
+    remove_category_command,
+    admin_callback,
+)
+from pymongo import MongoClient
+
+# --- Health Check Server ---
 async def health_server():
-    """Dummy TCP server for health checks"""
     async def handle(_reader, _writer):
         _writer.close()
         await _writer.wait_closed()
-
     server = await asyncio.start_server(handle, '0.0.0.0', 8000)
     async with server:
         await server.serve_forever()
 
-# Bot Handlers
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🚀 Bot is operational!")
+# --- DB Initialization ---
+async def init_db(application):
+    application.bot_data['db_client'] = MongoClient(MONGODB_URI).get_default_database()
+    logging.info("✅ MongoDB connected.")
 
+# --- Main Bot Runner ---
 async def run_bot():
     # Start health check server
     health_task = asyncio.create_task(health_server())
-    
+
     # Initialize bot
     application = (
         ApplicationBuilder()
         .token(TELEGRAM_BOT_TOKEN)
+        .post_init(init_db)
         .build()
     )
-    
+
+    # --- Register User Commands ---
     application.add_handler(CommandHandler("start", start_command))
-    
+    application.add_handler(CommandHandler("getvideo", get_video_command))
+
+    # --- Register Admin Commands ---
+    application.add_handler(CommandHandler("addcategory", add_category_command))
+    application.add_handler(CommandHandler("removecategory", remove_category_command))
+
+    # --- Register Callback Handlers ---
+    # Navigation buttons (prev/next)
+    application.add_handler(CallbackQueryHandler(navigation_callback, pattern="^(prev_|next_)$"))
+    # Category selection
+    application.add_handler(CallbackQueryHandler(category_callback, pattern="^category_"))
+    # Show categories button
+    application.add_handler(CallbackQueryHandler(show_categories_callback, pattern="^show_categories$"))
+    # Admin inline actions (if any)
+    application.add_handler(CallbackQueryHandler(admin_callback, pattern="^admin_"))
+
     try:
         await application.initialize()
         await application.start()
         await application.updater.start_polling()
-        
-        # Keep both services running
         while True:
             await asyncio.sleep(3600)
-            
     finally:
         health_task.cancel()
         await application.updater.stop()
@@ -57,10 +85,8 @@ def main():
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO
     )
-    
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    
     try:
         loop.run_until_complete(run_bot())
     except KeyboardInterrupt:
