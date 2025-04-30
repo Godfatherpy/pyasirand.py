@@ -4,11 +4,11 @@ from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     CallbackQueryHandler,
-    ContextTypes,
 )
 from config import TELEGRAM_BOT_TOKEN, MONGODB_URI
+from pymongo import MongoClient
 
-# Import your handlers
+# --- Import your handlers ---
 from handlers.user import (
     start_command,
     get_video_command,
@@ -21,7 +21,6 @@ from handlers.admin import (
     remove_category_command,
     admin_callback,
 )
-from pymongo import MongoClient
 
 # --- Health Check Server ---
 async def health_server():
@@ -59,13 +58,9 @@ async def run_bot():
     application.add_handler(CommandHandler("removecategory", remove_category_command))
 
     # --- Register Callback Handlers ---
-    # Navigation buttons (prev/next)
     application.add_handler(CallbackQueryHandler(navigation_callback, pattern="^(prev_|next_)$"))
-    # Category selection
     application.add_handler(CallbackQueryHandler(category_callback, pattern="^category_"))
-    # Show categories button
     application.add_handler(CallbackQueryHandler(show_categories_callback, pattern="^show_categories$"))
-    # Admin inline actions (if any)
     application.add_handler(CallbackQueryHandler(admin_callback, pattern="^admin_"))
 
     try:
