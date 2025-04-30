@@ -1,5 +1,3 @@
-# keyboards/inline.py
-
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
 def video_navigation_keyboard():
@@ -20,10 +18,21 @@ def video_navigation_keyboard():
 def category_keyboard(categories):
     """
     Returns an inline keyboard for category selection.
-    :param categories: List of category dicts, each with a 'name' field.
+
+    :param categories: List of category dicts, each with a 'name' key.
     """
-    keyboard = [
-        [InlineKeyboardButton(cat['name'], callback_data=f"category_{cat['name']}")]
-        for cat in categories
-    ]
+    if not isinstance(categories, list):
+        raise ValueError("categories must be a list of dicts with a 'name' key")
+
+    keyboard = []
+    for cat in categories:
+        name = cat.get('name')
+        if not name:
+            continue  # skip if no name
+        keyboard.append([InlineKeyboardButton(name, callback_data=f"category_{name}")])
+
+    if not keyboard:
+        # Fallback button if no categories
+        keyboard = [[InlineKeyboardButton("No categories found", callback_data="none")]]
+
     return InlineKeyboardMarkup(keyboard)
