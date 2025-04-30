@@ -1,10 +1,13 @@
 import logging
 import asyncio
+from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     CallbackQueryHandler,
+    ContextTypes,
 )
+
 from config import TELEGRAM_BOT_TOKEN, MONGODB_URI
 from handlers.user import (
     start_command,
@@ -26,59 +29,70 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- Main Bot Setup ---
-async def main():
-    try:
-        # Initialize MongoDB client
-        db_client = init_db(MONGODB_URI)
-
-        # Build the Telegram bot application
-        application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-
-        # Store db_client in bot_data for access in handlers
+async def store_db_client(db_client):
+    """Custom post_init handler to store database client"""
+    async def callback(application):
         application.bot_data["db_client"] = db_client
+        logger.info("Database client stored in bot_data")
+    return callback
 
-        # --- Register User Command Handlers ---
-        application.add_handler(CommandHandler("start", start_command))
-        application.add_handler(CommandHandler("getvideo", get_video_command))
-        application.add_handler(
-            CallbackQueryHandler(navigation_callback, pattern=r"^(next|prev)_")
-        )
-        application.add_handler(CallbackQueryHandler(category_callback, pattern=r"^category_"))
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Global error handler"""
+    logger.error(f"Update {update} caused error: {context.error}", exc_info=True)
 
-        # --- Register Admin Command Handlers ---
-        application.add_handler(CommandHandler("addcategory", add_category_command))
-        application.add_handler(CommandHandler("removecategory", remove_category_command))
-        application.add_handler(CallbackQueryHandler(admin_callback, pattern=r"^admin_"))
-
-        # --- Start the bot ---
-        logger.info("Bot started and polling for updates.")
-        await application.run_polling(drop_pending_updates=True)
-        
-    except Exception as e:
-        logger.error(f"An error occurred: {e}")
-        raise  # Re-raise to ensure proper shutdown
-
-async def shutdown(application):
-    """Handle graceful shutdown"""
-    await application.updater.stop()
-    await application.stop()
-    await application.shutdown()
-
-if __name__ == "__main__":
-    # Create new event loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+async def main():
+    # Initialize MongoDB client
+    db_client = init_db(MONGODB_URI)
     
     try:
-        # Run main coroutine
-        loop.run_until_complete(main())
-    except KeyboardInterrupt:
-        logger.info("Received shutdown signal, exiting...")
+        application = (
+            ApplicationBuilder()
+            .token(TELEGRAM_BOT_TOKEN)
+            .post_init(store_db_client(db_client))
+            .build()
+        )
+
+        # --- Handler Registration ---
+        handlers = [
+            CommandHandler("start", start_command),
+            CommandHandler("getvideo", get_video_command),
+            CallbackQueryHandler(navigation_callback, pattern=r"^(next|prev)_"),
+            CallbackQueryHandler(category_callback, pattern=r"^category_"),
+            CommandHandler("addcategory", add_category_command),
+            CommandHandler("removecategory", remove_category_command),
+            CallbackQueryHandler(admin_callback, pattern=r"^admin_"),
+        ]
+        
+        for handler in handlers:
+            application.add_handler(handler)
+
+        # Add error handler
+        application.add_error_handler(error_handler)
+
+        # --- Start Polling ---
+        logger.info("Bot started with production configuration")
+        await application.run_polling(
+            drop_pending_updates=True,
+            close_loop=False,
+            stop_signals=None,
+            allowed_updates=[
+                "message",
+                "callback_query",
+                "chat_member",
+                "my_chat_member"
+            ]
+        )
+
     except Exception as e:
-        logger.critical(f"Fatal error: {e}")
+        logger.critical(f"Fatal error: {e}", exc_info=True)
+        raise
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.critical(f"Unhandled exception: {e}", exc_info=True)
     finally:
-        # Cleanup resources
-        if 'application' in globals():
-            loop.run_until_complete(shutdown(application))
-        loop.close()
+        logger.info("Bot process terminated")
