@@ -56,4 +56,43 @@ async def main():
             CallbackQueryHandler(navigation_callback, pattern=r"^(next|prev)_"),
             CallbackQueryHandler(category_callback, pattern=r"^category_"),
             CommandHandler("addcategory", add_category_command),
-            CommandHandler("removecategory",
+            CommandHandler("removecategory", remove_category_command),
+            CallbackQueryHandler(admin_callback, pattern=r"^admin_"),
+        ]
+        
+        for handler in handlers:
+            application.add_handler(handler)
+
+        application.add_error_handler(error_handler)
+
+        # --- Start Polling ---
+        logger.info("Bot starting with proper event loop handling")
+        await application.run_polling(
+            drop_pending_updates=True,
+            close_loop=False,
+            stop_signals=None,
+            allowed_updates=[
+                "message",
+                "callback_query",
+                "chat_member",
+                "my_chat_member"
+            ]
+        )
+
+    except asyncio.CancelledError:
+        logger.info("Bot shutdown requested")
+    except Exception as e:
+        logger.critical(f"Fatal error: {e}", exc_info=True)
+        if application:
+            await application.stop()
+        raise
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.critical(f"Unhandled exception: {e}", exc_info=True)
+    finally:
+        logger.info("Process terminated")
