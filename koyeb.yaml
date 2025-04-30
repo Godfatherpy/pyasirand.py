@@ -1,0 +1,9 @@
+services:
+  - name: telegram-bot
+    ports:
+      - port: 8000
+    health_checks:
+      tcp:
+        port: 8000
+        interval: 10s
+        timeout: 5s
