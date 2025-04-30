@@ -1,5 +1,3 @@
-# utils/decorators.py
-
 from functools import wraps
 from config import ADMIN_IDS
 
@@ -9,11 +7,13 @@ def admin_only(handler_func):
     """
     @wraps(handler_func)
     async def wrapper(update, context, *args, **kwargs):
-        user_id = update.effective_user.id
+        user = getattr(update, "effective_user", None)
+        user_id = getattr(user, "id", None)
         if user_id not in ADMIN_IDS:
-            if update.message:
+            # Handle both message and callback_query cases
+            if hasattr(update, "message") and update.message:
                 await update.message.reply_text("❌ You are not authorized to use this command.")
-            elif update.callback_query:
+            elif hasattr(update, "callback_query") and update.callback_query:
                 await update.callback_query.answer("❌ You are not authorized.", show_alert=True)
             return
         return await handler_func(update, context, *args, **kwargs)
@@ -26,13 +26,16 @@ def premium_required(handler_func):
     """
     @wraps(handler_func)
     async def wrapper(update, context, *args, **kwargs):
-        user_id = update.effective_user.id
-        db = context.bot_data['db_client']
-        user = db.users.find_one({"user_id": user_id})
-        if not user or not user.get("is_premium", False):
-            if update.message:
+        user = getattr(update, "effective_user", None)
+        user_id = getattr(user, "id", None)
+        db = context.bot_data.get('db_client')
+        user_doc = None
+        if db:
+            user_doc = db.users.find_one({"user_id": user_id})
+        if not user_doc or not user_doc.get("is_premium", False):
+            if hasattr(update, "message") and update.message:
                 await update.message.reply_text("🔒 This feature is for premium users only.")
-            elif update.callback_query:
+            elif hasattr(update, "callback_query") and update.callback_query:
                 await update.callback_query.answer("🔒 Premium only.", show_alert=True)
             return
         return await handler_func(update, context, *args, **kwargs)
