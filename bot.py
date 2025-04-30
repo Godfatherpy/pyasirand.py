@@ -29,26 +29,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def store_db_client(db_client):
-    """Custom post_init handler to store database client"""
-    async def callback(application):
-        application.bot_data["db_client"] = db_client
-        logger.info("Database client stored in bot_data")
-    return callback
+async def store_db_client(application):
+    """Proper async initialization with database client"""
+    application.bot_data["db_client"] = init_db(MONGODB_URI)
+    logger.info("Database client initialized")
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Global error handler"""
     logger.error(f"Update {update} caused error: {context.error}", exc_info=True)
 
 async def main():
-    # Initialize MongoDB client
-    db_client = init_db(MONGODB_URI)
-    
+    """Main async entry point"""
     try:
         application = (
             ApplicationBuilder()
             .token(TELEGRAM_BOT_TOKEN)
-            .post_init(store_db_client(db_client))
+            .post_init(store_db_client)
             .build()
         )
 
@@ -66,11 +62,10 @@ async def main():
         for handler in handlers:
             application.add_handler(handler)
 
-        # Add error handler
         application.add_error_handler(error_handler)
 
         # --- Start Polling ---
-        logger.info("Bot started with production configuration")
+        logger.info("Starting bot with proper event loop handling")
         await application.run_polling(
             drop_pending_updates=True,
             close_loop=False,
@@ -95,4 +90,4 @@ if __name__ == "__main__":
     except Exception as e:
         logger.critical(f"Unhandled exception: {e}", exc_info=True)
     finally:
-        logger.info("Bot process terminated")
+        logger.info("Process terminated")
