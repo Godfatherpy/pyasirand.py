@@ -53,15 +53,32 @@ async def main():
 
         # --- Start the bot ---
         logger.info("Bot started and polling for updates.")
-        await application.run_polling()
+        await application.run_polling(drop_pending_updates=True)
+        
     except Exception as e:
         logger.error(f"An error occurred: {e}")
+        raise  # Re-raise to ensure proper shutdown
+
+async def shutdown(application):
+    """Handle graceful shutdown"""
+    await application.updater.stop()
+    await application.stop()
+    await application.shutdown()
 
 if __name__ == "__main__":
-    import asyncio
+    # Create new event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
     try:
-        asyncio.get_event_loop().run_until_complete(main())
-    except RuntimeError:
-        import nest_asyncio
-        nest_asyncio.apply()
-        asyncio.get_event_loop().run_until_complete(main())
+        # Run main coroutine
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        logger.info("Received shutdown signal, exiting...")
+    except Exception as e:
+        logger.critical(f"Fatal error: {e}")
+    finally:
+        # Cleanup resources
+        if 'application' in globals():
+            loop.run_until_complete(shutdown(application))
+        loop.close()
