@@ -35,14 +35,11 @@ async def health_server():
 async def init_db(application):
     try:
         client = MongoClient(MONGODB_URI)
-        # Check if we have a database name in the URI
         db_name = client.get_database().name
         if not db_name or db_name == 'test':
-            # If no database name in URI, use a default
             db = client['telegram_video_bot']
         else:
             db = client.get_database()
-            
         application.bot_data['db_client'] = db
         logging.info(f"✅ MongoDB connected to database: {db.name}")
     except Exception as e:
@@ -58,9 +55,11 @@ async def run_bot():
     application = (
         ApplicationBuilder()
         .token(TELEGRAM_BOT_TOKEN)
-        .post_init(init_db)
         .build()
     )
+
+    # --- Initialize DB before adding handlers ---
+    await init_db(application)
 
     # --- Register User Commands ---
     application.add_handler(CommandHandler("start", start_command))
@@ -71,7 +70,7 @@ async def run_bot():
     application.add_handler(CommandHandler("removecategory", remove_category_command))
 
     # --- Register Callback Handlers ---
-    application.add_handler(CallbackQueryHandler(navigation_callback, pattern="^(prev_|next_).*"))  # Changed pattern
+    application.add_handler(CallbackQueryHandler(navigation_callback, pattern="^(prev_|next_).*"))
     application.add_handler(CallbackQueryHandler(category_callback, pattern="^category_"))
     application.add_handler(CallbackQueryHandler(show_categories_callback, pattern="^show_categories$"))
     application.add_handler(CallbackQueryHandler(admin_callback, pattern="^admin_"))
