@@ -1,16 +1,12 @@
-# handlers/user.py
-
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaVideo
 from telegram.ext import ContextTypes
 from db.utils import get_or_create_user, get_category_list
 from db.models import update_user_category, add_video_to_history
 from services.video_service import fetch_random_video
 from services.url_shortener import generate_24h_token_url
-from keyboards.inline import video_navigation_keyboard  # Import from keyboards package
+from keyboards.inline import video_navigation_keyboard  # Use from keyboards package
 from config import ADMIN_IDS
 from datetime import datetime
-
-# Rest of your code remains the same, but remove the video_navigation_keyboard function
 
 # --- /start command ---
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -106,7 +102,10 @@ async def navigation_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     await query.edit_message_media(
-        media=video["file_id"],
+        media=InputMediaVideo(
+            media=video["file_id"],
+            caption=f"Category: {category}"
+        ),
         reply_markup=video_navigation_keyboard()
     )
     add_video_to_history(db, user_id, str(video["_id"]))
@@ -137,17 +136,3 @@ async def show_categories_callback(update: Update, context: ContextTypes.DEFAULT
         "Select a category:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
-# --- Helper: Inline keyboard for video navigation ---
-def video_navigation_keyboard():
-    keyboard = [
-        [
-            InlineKeyboardButton("⬅️ Previous", callback_data="prev_"),
-            InlineKeyboardButton("➡️ Next", callback_data="next_"),
-        ],
-        [
-            InlineKeyboardButton("📂 Category", callback_data="show_categories")
-        ],
-    ]
-    return InlineKeyboardMarkup(keyboard)
-    
