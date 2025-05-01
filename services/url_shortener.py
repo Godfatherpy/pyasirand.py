@@ -1,42 +1,66 @@
 import requests
+from urllib.parse import quote
 from helper import str_to_b64, get_current_time
-from config import URL_SHORTENER_API
 
-def shorten_url(long_url):
+def shorten_url(long_url: str) -> str:
     """
-    Shortens a URL using the configured shortener service.
+    Shortens URLs using custom shortener service with HTML response prevention
+    Returns original URL (converted to t.me) if shortening fails
     """
-    # Ensure URL_SHORTENER_API has a placeholder for the long_url
-    if '{}' in URL_SHORTENER_API:
-        api_url = URL_SHORTENER_API.format(long_url)
-    else:
-        # Fallback if no placeholder is found
-        api_url = f"{URL_SHORTENER_API}{long_url}"
-
     try:
-        response = requests.get(api_url, timeout=10)
-        # Many services return the short link as plain text, some as JSON.
-        # Try to extract the link accordingly:
-        if response.status_code == 200:
-            try:
-                data = response.json()
-                for key in ['shortenedUrl', 'short_url', 'shortened', 'url']:
-                    if key in data:
-                        return data[key]
-            except Exception:
-                # If not JSON, fallback to plain text
-                return response.text.strip()
-        return long_url  # fallback to original if failed
-    except Exception as e:
-        print(f"Shortener error: {e}")
-        return long_url  # fallback
+        # Encode URL and prepare API request
+        encoded_url = quote(long_url, safe='')
+        api_url = f"YOUR_CUSTOM_API_ENDPOINT?url={encoded_url}"  # Replace with your actual API URL
+        
+        # Force text/plain response if possible
+        headers = {'Accept': 'text/plain'}
+        
+        response = requests.get(
+            api_url,
+            timeout=10,
+            headers=headers
+        )
 
-def generate_24h_token_url(bot_username, user_id):
+        # Reject HTML responses immediately
+        if 'text/html' in response.headers.get('Content-Type', ''):
+            raise ValueError("Received HTML response from shortener")
+
+        # Handle successful responses
+        if response.status_code == 200:
+            # Try JSON first
+            try:
+                return response.json()['short_url']  # Replace 'short_url' with your API's key
+            except ValueError:
+                # Fallback to text response
+                short_url = response.text.strip()
+                # Validate URL format
+                if short_url.startswith(('http://', 'https://')):
+                    return short_url
+
+        return long_url.replace("telegram.dog", "t.me")
+    
+    except Exception as e:
+        print(f"Shortening error: {str(e)}")
+        return long_url.replace("telegram.dog", "t.me")
+
+def generate_24h_token_url(bot_username: str, user_id: int) -> tuple:
     """
-    Generates a 24-hour tokenized short URL for the user.
+    Generates refresh URLs with enhanced HTML protection
+    Returns tuple: (url, expiry_timestamp)
     """
-    expiry_time = get_current_time() + 86400  # 24 hours in seconds
+    expiry_time = get_current_time() + 86400
     token = str_to_b64(f"{user_id}:{expiry_time}")
-    long_link = f"https://telegram.dog/{bot_username}?start=token_{token}"
-    short_link = shorten_url(long_link)
-    return short_link, expiry_time
+    
+    # Force t.me domain for base URL
+    base_url = f"https://t.me/{bot_username}?start=token_{token}"
+    
+    # Shortening logic with HTML prevention
+    if len(base_url) > 60:  # Only shorten if necessary
+        shortened = shorten_url(base_url)
+        
+        # Final HTML check before returning
+        if '<!DOCTYPE html>' in shortened.lower():
+            return base_url, expiry_time
+        return shortened, expiry_time
+    
+    return base_url, expiry_time
