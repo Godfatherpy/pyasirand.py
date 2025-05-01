@@ -1,13 +1,16 @@
 # handlers/user.py
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaVideo
 from telegram.ext import ContextTypes
 from db.utils import get_or_create_user, get_category_list
 from db.models import update_user_category, add_video_to_history
 from services.video_service import fetch_random_video
 from services.url_shortener import generate_24h_token_url
+from keyboards.inline import video_navigation_keyboard  # Import from keyboards package
 from config import ADMIN_IDS
 from datetime import datetime
+
+# Rest of your code remains the same, but remove the video_navigation_keyboard function
 
 # --- /start command ---
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
