@@ -1,5 +1,3 @@
-# services/url_shortener.py
-
 import requests
 from helper import str_to_b64, get_current_time
 from config import URL_SHORTENER_API
@@ -8,16 +6,20 @@ def shorten_url(long_url):
     """
     Shortens a URL using the configured shortener service.
     """
-    api_url = URL_SHORTENER_API.format(long_url)
+    # Ensure URL_SHORTENER_API has a placeholder for the long_url
+    if '{}' in URL_SHORTENER_API:
+        api_url = URL_SHORTENER_API.format(long_url)
+    else:
+        # Fallback if no placeholder is found
+        api_url = f"{URL_SHORTENER_API}{long_url}"
+
     try:
         response = requests.get(api_url, timeout=10)
         # Many services return the short link as plain text, some as JSON.
         # Try to extract the link accordingly:
         if response.status_code == 200:
-            # If the response is a JSON with a 'shortenedUrl' or similar key:
             try:
                 data = response.json()
-                # Try common keys, adjust as needed:
                 for key in ['shortenedUrl', 'short_url', 'shortened', 'url']:
                     if key in data:
                         return data[key]
@@ -38,4 +40,3 @@ def generate_24h_token_url(bot_username, user_id):
     long_link = f"https://telegram.dog/{bot_username}?start=token_{token}"
     short_link = shorten_url(long_link)
     return short_link, expiry_time
-  
