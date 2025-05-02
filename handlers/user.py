@@ -1,138 +1,147 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaVideo
 from telegram.ext import ContextTypes
-from db.utils import get_or_create_user, get_category_list
-from db.models import update_user_category, add_video_to_history
-from services.video_service import fetch_random_video
+from datetime import datetime, timedelta
+from config import Config
+from database import Database
+from keyboards import main_keyboard, expired_keyboard
 from services.url_shortener import generate_24h_token_url
-from keyboards.inline import video_navigation_keyboard  # Use from keyboards package
-from config import ADMIN_IDS
-from datetime import datetime
 
-# --- /start command ---
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    db = context.bot_data['db_client']
-    user = get_or_create_user(db, user_id)
-
-    now = int(datetime.utcnow().timestamp())
-    token_expiry = user.get("token_expiry", 0)
-
-    if user_id not in ADMIN_IDS and now > token_expiry:
-        short_url, expiry = generate_24h_token_url(context.bot.username, user_id)
-        db.users.update_one({"user_id": user_id}, {"$set": {"token_expiry": expiry}})
+    user = Database.get_user(user_id)
+    
+    if not user:
+        new_user = {
+            "user_id": user_id,
+            "tokens": Config.INITIAL_TOKENS,
+            "token_expiry": (datetime.now() + timedelta(hours=Config.TOKEN_EXPIRY_HOURS)).isoformat(),
+            "subscription": False,
+            "cursor": 0,
+            "current_category": Config.DEFAULT_CATEGORY,
+            "viewed_videos": []
+        }
+        Database.update_user(user_id, new_user)
         await update.message.reply_text(
-            f"🕒 Your access token expired!\n\n"
-            f"Click the link below to refresh your access for 24 hours:\n\n"
-            f"{short_url}\n\n"
-            f"After opening the link, come back and use the bot again."
+            f"🎥 Welcome! You've received {Config.INITIAL_TOKENS} free tokens "
+            f"(valid for {Config.TOKEN_EXPIRY_HOURS} hours)"
         )
-        return
+    else:
+        remaining_time = datetime.fromisoformat(user['token_expiry']) - datetime.now()
+        hours = max(0, int(remaining_time.total_seconds() // 3600))
+        await update.message.reply_text(
+            f"👋 Welcome back! Tokens: {user.get('tokens', 0)} "
+            f"(expires in {hours} hours)"
+        )
+    
+    await send_current_video(update, context)
 
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎬 Get Video", callback_data="getvideo")],
-        [InlineKeyboardButton("📂 Choose Category", callback_data="show_categories")]
-    ])
-
-    await update.message.reply_text(
-        "👋 Welcome! Use /getvideo or the button below to get a random video.",
-        reply_markup=keyboard
-    )
-
-# --- /getvideo command or button ---
-async def get_video_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def send_current_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    db = context.bot_data['db_client']
-    user = get_or_create_user(db, user_id)
-
-    now = int(datetime.utcnow().timestamp())
-    token_expiry = user.get("token_expiry", 0)
-
-    if user_id not in ADMIN_IDS and now > token_expiry:
+    user = Database.get_user(user_id)
+    
+    if not check_access(user):
         short_url, expiry = generate_24h_token_url(context.bot.username, user_id)
-        db.users.update_one({"user_id": user_id}, {"$set": {"token_expiry": expiry}})
+        Database.update_user(user_id, {"token_expiry": expiry.isoformat()})
         await update.message.reply_text(
             f"🕒 Your access token expired!\n\n"
             f"Click the link below to refresh your access for 24 hours:\n\n"
             f"{short_url}\n\n"
-            f"After opening the link, come back and use the bot again."
+            f"After opening the link, come back and use the bot again.",
+            reply_markup=expired_keyboard()
         )
         return
 
-    category = user.get("selected_category") or "general"
-    video = fetch_random_video(db, user_id, category)
+    videos = Database.get_videos(user['current_category'], user['cursor'])
+    
+    if videos:
+        await update.message.reply_video(
+            video=videos[0]['file_id'],
+            caption=f"Category: {user['current_category']}",
+            reply_markup=main_keyboard(user['current_category'])
+        )
+        # Mark video as viewed
+        Database.update_user(user_id, {
+            "$push": {"viewed_videos": videos[0]['file_id']},
+            "$inc": {"tokens": -1}
+        })
+    else:
+        await update.message.reply_text(
+            "No videos available in this category.",
+            reply_markup=main_keyboard()
+        )
 
-    if not video:
-        await update.message.reply_text("No more unseen videos in this category! Try another category.")
-        return
-
-    await update.message.reply_video(
-        video=video["file_id"],
-        caption=f"Category: {category}",
-        reply_markup=video_navigation_keyboard()
-    )
-    add_video_to_history(db, user_id, str(video["_id"]))
-
-# --- Navigation callback (Next/Previous) ---
 async def navigation_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
-    db = context.bot_data['db_client']
-    user = get_or_create_user(db, user_id)
-
-    now = int(datetime.utcnow().timestamp())
-    token_expiry = user.get("token_expiry", 0)
-
-    if user_id not in ADMIN_IDS and now > token_expiry:
+    user = Database.get_user(user_id)
+    
+    if not check_access(user):
         short_url, expiry = generate_24h_token_url(context.bot.username, user_id)
-        db.users.update_one({"user_id": user_id}, {"$set": {"token_expiry": expiry}})
+        Database.update_user(user_id, {"token_expiry": expiry.isoformat()})
         await query.edit_message_text(
             f"🕒 Your access token expired!\n\n"
             f"Click the link below to refresh your access for 24 hours:\n\n"
             f"{short_url}\n\n"
-            f"After opening the link, come back and use the bot again."
+            f"After opening the link, come back and use the bot again.",
+            reply_markup=expired_keyboard()
         )
         return
 
-    category = user.get("selected_category") or "general"
-    video = fetch_random_video(db, user_id, category)
+    action = query.data
+    new_category = None
+    
+    if action == 'next':
+        user['cursor'] += 1
+    elif action == 'prev':
+        user['cursor'] = max(0, user['cursor'] - 1)
+    elif action.startswith('cat_'):
+        new_category = action.split('_')[1]
+        user['current_category'] = new_category
+        user['cursor'] = 0
 
-    if not video:
-        await query.edit_message_caption("No more unseen videos in this category!")
-        return
+    Database.update_user(user_id, user)
+    await update_video_display(query, user_id)
 
-    await query.edit_message_media(
-        media=InputMediaVideo(
-            media=video["file_id"],
-            caption=f"Category: {category}"
-        ),
-        reply_markup=video_navigation_keyboard()
-    )
-    add_video_to_history(db, user_id, str(video["_id"]))
+async def update_video_display(query, user_id):
+    user = Database.get_user(user_id)
+    videos = Database.get_videos(user['current_category'], user['cursor'])
+    
+    if videos:
+        await query.edit_message_media(
+            InputMediaVideo(
+                videos[0]['file_id'],
+                caption=f"Category: {user['current_category']}"
+            ),
+            reply_markup=main_keyboard(user['current_category'])
+        )
+        # Mark video as viewed
+        Database.update_user(user_id, {
+            "$push": {"viewed_videos": videos[0]['file_id']},
+            "$inc": {"tokens": -1}
+        })
+    else:
+        await query.edit_message_text(
+            "End of list 🏁",
+            reply_markup=main_keyboard()
+        )
 
-# --- Category selection callback ---
-async def category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    db = context.bot_data['db_client']
-    user_id = query.from_user.id
-    category_name = query.data.replace("category_", "")
-    update_user_category(db, user_id, category_name)
-    await query.edit_message_text(
-        f"✅ Category switched to: {category_name}\nUse /getvideo to get a video."
-    )
-
-# --- Show categories (triggered by "Category" button) ---
 async def show_categories_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    db = context.bot_data['db_client']
-    categories = get_category_list(db)
+    categories = Database.get_categories()
     keyboard = [
-        [InlineKeyboardButton(cat['name'], callback_data=f"category_{cat['name']}")]
+        [InlineKeyboardButton(cat['name'], callback_data=f"cat_{cat['name']}")]
         for cat in categories
     ]
     await query.edit_message_text(
         "Select a category:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
+def check_access(user):
+    if user.get('subscription'):
+        return True
+    if user.get('tokens', 0) > 0 and datetime.fromisoformat(user['token_expiry']) > datetime.now():
+        return True
+    return False
