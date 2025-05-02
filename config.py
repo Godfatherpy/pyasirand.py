@@ -3,14 +3,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-MONGODB_URI = os.getenv("MONGODB_URI")
-URL_SHORTENER_API = os.getenv("URL_SHORTENER_API")
-DEFAULT_CATEGORY = os.getenv("DEFAULT_CATEGORY", "general")
-VIDEO_LIMIT_PER_DAY = int(os.getenv("VIDEO_LIMIT_PER_DAY", 20))
-
-# Parse ADMIN_IDS as a list of integers from comma-separated string
-ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
-
-if not TELEGRAM_BOT_TOKEN or not MONGODB_URI or not URL_SHORTENER_API:
-    raise ValueError("Missing required environment variables")
+class Config:
+    BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    MONGO_URI = os.getenv("MONGODB_URI")
+    ADMIN_IDS = [int(id) for id in os.getenv("ADMIN_IDS").split(",")]
+    DEFAULT_CATEGORY = os.getenv("DEFAULT_CATEGORY", "general")
+    INITIAL_TOKENS = int(os.getenv("INITIAL_TOKENS", 5))
+    TOKEN_EXPIRY_HOURS = int(os.getenv("TOKEN_EXPIRY_HOURS", 24))
+    URL_SHORTENER = os.getenv("URL_SHORTENER_API")
+    DB_NAME = "spicybot"
